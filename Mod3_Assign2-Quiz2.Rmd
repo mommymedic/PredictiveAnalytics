@@ -1,0 +1,263 @@
+---
+title: "Mod3_Assign2-Quiz2"
+author: "Grace Williams"
+date: "2023-05-31"
+output: word_document
+editor_options: 
+  chunk_output_type: console
+---
+
+##### male: 1 if the parolee is male, 0 if female
+##### race: 1 if the parolee is white, 2 otherwise
+##### age: the parolee’s age (in years) when he or she was released from prison
+##### state: a code for the parolee’s state. 2 is Kentucky, 3 is Louisiana, 4 is Virginia, and 1 is any other state. The three states were selected due to having a high representation in the dataset.
+##### time.served: the number of months the parolee served in prison (limited by the inclusion criteria to not exceed 6 months).
+##### max.sentence: the maximum sentence length for all charges, in months (limited by the inclusion criteria to not exceed 18 months).
+###### multiple.offenses: 1 if the parolee was incarcerated for multiple offenses, 0 otherwise.
+##### crime: a code for the parolee’s main crime leading to incarceration. 2 is larceny, 3 is drug-related crime, 4 is driving-related crime, and 1 is any other crime.
+##### violator: 1 if the parolee violated the parole, and 0 if the parolee completed the parole without violation.
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(e1071)
+library(ROCR)
+library(readr)
+library(readxl)
+library(glmnet)
+library(ggplot2)
+
+parole <- read_csv("parole.csv")
+
+parole
+```
+
+## Libraries: For this assignment you will need the following libraries: tidyverse, tidymodels, e1071, and ROCR. 
+
+## Before beginning the assignment tasks, you should read-in the data for the assignment into a data frame called parole. Carefully convert the male, race, state, crime, multiple.offenses, and violator variables to factors. Recode (rename) the factor levels of each of these variables according to the description of the variables provided in the ParoleData.txt file (located with the assignment on Canvas). Take your time and double-check that you have correctly converted and renamed the variables listed above.
+
+```{r}
+parole = parole %>% 
+  mutate(male = as_factor(male)) %>% 
+  mutate(male = fct_recode(male, "Male" = "0", "Female" = "1" )) 
+
+parole = parole %>% 
+  mutate(race = as_factor(race)) %>% 
+  mutate(race = fct_recode(race, "Other"= "2", "White" = "1" ))
+
+parole = parole %>% 
+  mutate(state = as_factor(state)) %>% 
+  mutate(state = fct_recode(state, "Other" = "1", "Kentucky" = "2", "Louisiana" = "3", "Virginia" = "4" ))
+
+parole = parole %>% 
+  mutate(crime = as_factor(crime)) %>% 
+  mutate(crime = fct_recode(crime, "Other" = "1", "Larceny" = "2", "Drug-Related" = "3", "Driving-Related" = "4" ))
+
+parole = parole %>% 
+  mutate(multiple.offenses = as_factor(multiple.offenses)) %>% 
+  mutate(multiple.offenses = fct_recode(multiple.offenses, "Otherwise" = "0", "Multiple-Offenses" = "1" ))
+
+parole = parole %>% 
+  mutate(violator = as_factor(violator)) %>% 
+  mutate(violator = fct_recode(violator, "No Violation" = "0", "Violation" = "1" ))
+
+parole
+
+```
+
+## Question 1 There are 675 parolees in the dataset. How many of these parolees ended up violating parole? HINT: Examine the response variable “violator”.
+### 78
+```{r Q1}
+parole1 = parole %>%
+  filter(violator == "Violation")
+
+nrow(parole1)
+```
+## Split the data into training and testing sets. Your training set should have 70% of the data. Use a random number (set.seed) of 12345. Be sure that the split is stratified by “violator”.
+
+## Before proceeding, let’s take a moment to talk about the ordering of the levels (categories) in the response variable. The command below shows us the levels of the response variable. We should expect them to be “No” and then “Yes” (in that order). levels(train$violator)
+```{r Q2}
+set.seed(12345)
+parole_split = initial_split(parole, prop = 0.70, strata = violator)
+train = training(parole_split)
+test = testing(parole_split)
+
+nrow(train)
+```
+## Ordering is important when it comes to the categories of the response variable. We need the “positive” class (category) to be listed second. Here “Yes” is listed second. “Yes” is our “positive” class as we are interested in building models to detect parolees that violate parole rather than building models with the intent of identifying the parolees that do not violate parole. It seems like a small issue, but it’s an important one. What do we do if the categories are in the incorrect order (this happens sometimes)? We can rearrange the factor levels to put the positive class second (last). The code below accomplishes this. If your levels are properly ordered already, it won’t hurt to run this code. It’s good to keep this code around in case you do need to reorder levels
+```{r}
+
+train = train %>% mutate(violator = fct_relevel(violator, c("No Violation","Violation")))
+levels(train$violator)
+```
+
+## Question 3: Our objective is to predict whether or not a parolee will violate his/her parole. In this task, use appropriate data visualizations and/or tables to examine the relationship between each variable and the response variable “violator”. Use your visualizations to answer the questions below.
+## True/False: The violation rate appears slightly higher among males than among females.
+### **FALSE**
+
+## Question 4: True/False: The violation rate is considerably higher in Louisiana than in the other states.
+### **TRUE**
+
+## Question 5: True/False: The violation rate appears slightly higher among parolees with shorter“max_sentence” values.
+### **FALSE**
+
+
+```{r}
+
+ggplot(parole, aes(x=male, fill = violator)) + 
+  geom_bar() + theme_bw()
+
+ggplot(parole, aes(x=race, fill = violator)) + 
+  geom_bar() + theme_bw()
+
+ggplot(parole, aes(x=state, fill = violator)) + 
+  geom_bar() + theme_bw()
+
+ggplot(parole, aes(x=crime, fill = violator)) + 
+  geom_bar() + theme_bw()
+
+ggplot(parole, aes(x= max.sentence, fill = violator)) + 
+  geom_bar() + theme_bw() 
+```
+
+
+## Question 6: Create a logistic regression model using the “state” variable to predict “violator”.
+
+##Which state is the base level in the model summary?
+## A. KY
+## B. LA
+## C. VA
+## D. Other
+### **Other**
+```{r Q6 Q7}
+parole_model = 
+  logistic_reg(mode = "classification") %>% #note the use of logistic_reg and mode = "classification"
+  set_engine("glm") #standard logistic regression engine is glm
+
+train_recipe = recipe(violator ~ state, train)
+
+logreg_wf = workflow() %>%
+  add_recipe(train_recipe) %>% 
+  add_model(parole_model)
+
+train_fit = fit(logreg_wf, train)
+
+train_fit$fit$fit$fit
+```
+## Question 7 To two decimal places, what is the AIC of the model with “state” to predict “violator”?
+### **390.89**
+
+## Question 8 Create a logistic regression model using the training set to predict “violator” using the variables: “state”, “multiple.offenses”, and “race”.
+## Which variables are significant in the resulting model (select all that are significant)?
+## A. state
+## B. multiple.offenses
+## C. race
+## D. None of the variables in the model are significant
+### **C and B**
+```{r Q8}
+parole_model2 = 
+  logistic_reg(mode = "classification") %>% #note the use of logistic_reg and mode = "classification"
+  set_engine("glm") #standard logistic regression engine is glm
+
+train_recipe2 = recipe(violator ~ state +
+                         multiple.offenses +
+                         race, train)
+
+logreg_wf2 = workflow() %>%
+  add_recipe(train_recipe2) %>% 
+  add_model(parole_model2)
+
+train_fit2 = fit(logreg_wf2, train)
+
+train_fit2$fit$fit$fit
+
+#8 answer: all 
+```
+
+## Question 9: Use your model from Question 8 to determine the probability (to two decimal places) that the following parolee will violate parole: The parolee is in Louisiana, has multiple offenses, and is white.
+### **0.442**
+```{r Q9}
+newdata1 = data.frame(state = "Louisiana", race = "White", multiple.offenses = "Multiple-Offenses")
+
+predictions = predict(train_fit2, newdata1, type = "prob")
+```
+## Question 10: Continuing to use your model from Question 8, develop an ROC curve and determine the probability threshold that best balances specificity and sensitivity (on the training set). Be sure to be careful with the predict function syntax.
+
+## What is the value of this threshold (to four decimal places)?
+### **0.846476**
+```{r q10}
+predictions2 = predict(train_fit2, train, type = "prob")[2]
+
+ROCRpred = prediction(predictions2, train$violator) 
+###You shouldn't need to ever change the next two lines:
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+as.numeric(performance(ROCRpred, "auc")@y.values)
+
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRperf, ROCRpred))
+
+```
+## Question 11:  Continuing to use your model from Question 8, what is the model’s accuracy (on the training set) given the cutoff from Question 10? Report the accuracy to three decimal places. HINT: Use the threshold value out to all of its reported decimal places to ensure that your answer matches the solution.
+### 0.8177778
+
+## Question 12 Continuing to use the model from Question 8, what is the sensitivity of the model on the training set (to three decimal places)?
+## 0.7435897
+```{r 11 and 12}
+t1 = table(train$violator, predictions2 >0.2015788)
+
+(t1[1,1]+t1[2,2])/nrow(train)
+
+
+#accuracy
+36/(18+36)
+```
+
+```{r}
+t2 = table(train$violator, predictions2 >0.2)
+
+(t2[1,1]+t2[2,2])/nrow(train)
+```
+
+## Question 13: For the model from Question 8, which probability threshold results in the best accuracy (on the training set)?
+## A. 0.2
+## B. 0.3
+## C. 0.4
+## D. 0.5
+### D
+```{r 13}
+
+predictions3 = predict(train_fit2, test, type = "prob")[2]
+
+ROCRpred = prediction(predictions3, test$violator) 
+###You shouldn't need to ever change the next two lines:
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+as.numeric(performance(ROCRpred, "auc")@y.values)
+
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRperf, ROCRpred))
+
+t3 = table(test$violator, predictions3 >0.5)
+
+(t3[1,1]+t3[2,2])/nrow(test)
+
+#accuracy
+8/(16+8)
+```
+
