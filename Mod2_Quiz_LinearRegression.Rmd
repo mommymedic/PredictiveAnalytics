@@ -1,0 +1,156 @@
+---
+title: "Mod2_LinearRegression"
+author: "Grace Williams"
+date: "2023-05-24"
+output: word_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Simple Linear Regression and Correlation
+
+#### Libraries and Datasets Needed
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+library(lmtest)
+
+air = airquality
+```
+
+### Question 1: How many rows are in the "air" dataframe?
+##**153**
+```{r}
+nrow(air)
+```
+
+### Question 2: How many columns are in the "air" datagrame?
+##**6**
+```{r}
+ncol(air)
+```
+
+### Question 3: True/False: There is missing data in "Ozone" variable in the dataframe.
+##**TRUE**
+```{r}
+summary(air$Ozone)
+
+is.na(air$Ozone)
+```
+
+### Question 4: Which variable is the most likely to be the response (Y) variable?
+### A. Ozone
+### B. Solar.R
+### C. Wind
+### D. Temp
+### E. Month
+### F. Day
+##**D. Temp**
+
+### Cleaning up the data.
+```{r}
+air2 = air %>% drop_na()
+```
+
+### Question 5: How many rows in this new (air2) data frame?
+##**111**
+```{r}
+nrow(air2)
+ncol(air2)
+```
+
+### Question 6: How many columns remain in this new (air2) data frame?
+##**6**
+
+
+### Use the “ggpairs” function to develop a visualization of the relationships in this dataset and to show correlation values for the combinations of variables. Then use the “ggcorr” function to develop a correlation matrix for the variables. Hint: Use “label = TRUE” in the “ggcorr” function to show the correlation values.
+
+### Question 7: Which variable is the most strongly correlated with the "Ozone" variable?
+### A. Solar.R
+### B. Wind
+### C. Temp
+### D. Month
+### E. Day
+##**C. Temp**
+```{r}
+ggpairs(air2)
+ggcorr(air2, label = TRUE)
+```
+### Question 8: Which variable is least strongly correlated with the "Ozone" variable?
+### A. Solar.R
+### B. Wind
+### C. Temp
+### D. Month
+### E. Day
+##**E. Day**
+
+### Question 9: Plot "Temp" (x axis) versus "Ozone (y axis) using the "ggplot" function. Choose an appropriate chart type. Which statement best describes the relationship between "Temp" and "Ozone"?
+### A. As Temp increases, Ozone decreases
+### B. As Temp increases there is no noticeable change in Ozone
+### C. As Temp increases, Ozone increase
+##**C. As Temp increases, Ozone increases**
+```{r}
+ggplot(air2, aes(x = Temp, y = Ozone))+
+  geom_point()+
+  geom_smooth(method=lm)
+```
+
+### Use Tidymodels to create a linear regression model using “Temp” to predict “Ozone”. You miss wish to callyour model fit “lm_fit”.
+```{r}
+
+OT2 = recipe(Ozone ~ Temp, air2)
+OT2
+
+lm_model = 
+  linear_reg() %>%
+  set_engine("lm")
+lm_model
+
+lm_workflow =
+  workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(OT2)
+lm_workflow
+
+lm_fit = fit(lm_workflow, air2)
+
+summary(lm_fit$fit$fit$fit)
+
+confint(lm_fit$fit$fit$fit)
+
+
+testdata = data.frame(Temp = 80)
+predict(lm_fit, testdata)
+
+```
+### Question 10: What is the slope of this regression model (to four decimal places)?
+##**2.4391**
+
+### Question 11: What is the R-squared value of this model (not Adjusted R-squared) (to three decimal places)?
+##**0.488**
+
+### Question 12: Is the “Temp” variables significant in the model?
+##**Yes, Temp is significant**
+
+### Use the code below to generate 95% confidence intervals for the coefficients. Note that you may need to change “lm_fit” to the name of your model fit if you used a different name. 
+#### confint(lm_fit$fit$fit$fit)
+
+### Question 13: True/False: A 95% confidence interval for the slope coefficient does not contain zero.
+##**TRUE**
+
+### Question 14:  Using your linear regression model with “Temp” to predict “Ozone”, what is the predicted “Ozone” value when “Temp” is equal to 80 (to two decimal places)?
+##**47.5**
+
+### Perform appropriate model diagnostics to verify whether or not the model appears to meet the four linear regression model assumptions.
+
+### Question 15: True/False: There is no evidence of non-independent (autocorrelated) residuals.
+##**True**
+```{r}
+hist(air2$Temp)
+
+plot(Ozone ~ Temp, air2)
+
+cor(air2$Ozone, air2$Temp)
+```
+
