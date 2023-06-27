@@ -1,0 +1,70 @@
+---
+title: "Mod4_Assign1-Quiz1_MissingData"
+author: "Grace Williams"
+date: "2023-06-06"
+output: word_document
+editor_options: 
+  chunk_output_type: console
+---
+# Libraries: For this assignment you will need the following libraries: tidyverse, VIM, and mice.
+# Before beginning the assignment tasks, you should read-in the data for the assignment into a data frame called grades. This data contains grade information from an engineering course. The dataset was originally used to investigate how student performance in the course would be predictive of student grades on the “Final” exam. The “Prefix” column is a surrogate for enrollment year in the engineering program. Smaller values imply older (more mature?) students.
+```{r}
+library(tidyverse)
+library(VIM)
+library(mice)
+library(readr)
+library(ggplot2)
+library(GGally)
+library(naniar)
+library(skimr)
+
+grades <- read_csv("class-grades.csv")
+```
+
+## Task 1: For which variables is there missing data?
+```{r}
+
+is.na(grades)
+
+skim(grades)
+```
+
+## Task 2: Use the VIM package to visualize missingness. Are there any students that are missing multiple pieces of data?
+## Yes
+```{r}
+
+vim_plot = aggr(grades, numbers = TRUE, prop = c(TRUE, FALSE),cex.axis=.7)
+
+vis_miss(grades)
+
+```
+
+## Task 3: Use row-wise deletion of missing values to create a new data frame. How many rows remain in this data frame?
+```{r}
+
+grades_rowdel = grades %>% drop_na()
+```
+
+## Task 4: Use column-wise deletion of missing values to create a new data frame (from the original data frame not from the data frame created in Task 3). How many columns remain in this data frame?
+```{r}
+
+grades_coldel = grades %>% select(-Tutorial, -Midterm, -TakeHome, -Final)
+
+```
+
+## Task 5: Which approach (Task 3 or Task 4) seems preferable for this dataset? Briefly discuss your answer.
+### With column deletion we lose whole variables, row deletion only removes portions of the variables that have missing data. 
+
+## Task 6 Use the “mice” package to impute the missing data in this dataset. Set “m = 5” and “method =”pmm"" in the imputation. You MUST use a random number seed of 123 for this imputation. What is the mean value for the “Final” variable after imputation?
+### 68.33
+```{r}
+set.seed(123)
+imp_final = mice(grades, m=5, method='pmm', printFlag=FALSE)
+summary(imp_final)
+
+final_complete = complete(imp_final)
+summary(final_complete)
+
+
+```
+
