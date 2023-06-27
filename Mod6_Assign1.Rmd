@@ -1,0 +1,109 @@
+---
+title: "Mod6_Assign1-Quiz"
+author: "Grace Williams"
+date: "2023-06-22"
+output: word_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(readr)
+library(cluster)
+library(factoextra)
+
+trucks <- read_csv("trucks-1.csv")
+```
+
+```{r}
+na.omit(trucks)
+```
+
+```{r}
+summary(trucks)
+trucks_scaled = scale(trucks)
+summary(trucks_scaled)
+```
+ 
+```{r}
+
+set.seed(1234)
+clusts = 
+  tibble(k = 1:10) %>% #try from 1 to 10 clusters
+  mutate(
+    kclust = map(k, ~kmeans(trucks_scaled, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks_scaled)
+  )
+
+clusts
+```
+
+```{r}
+clusters =
+  clusts %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clusts %>%
+  unnest(cols = c(augmented))
+
+clusterings =
+  clusts %>%
+  unnest(cols = c(glanced))
+```
+
+```{r}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+```{r}
+cust_clust = kmeans(trucks_scaled, centers = 4)
+cust_clust
+```
+
+```{r}
+trucks <- augment(cust_clust, trucks)
+
+head(trucks)
+```
+
+```{r}
+ggplot(trucks, aes(x=Distance,y=Speeding,color=factor(.cluster))) + geom_point()
+```
+
+# Questions:
+
+# 1. Which characteristics (select all that apply) of the relationship between Distance and Speeding seem most apparent?
+## *a. There appears to be more speeding among the drivers with smaller Distances 
+## *b. The data points are arranged in what appear to be four clusters 
+## *c. Longer distance drivers appear more likely to speed 
+## *d. There are no well-defined clusters of data points
+### b and c
+
+# 2. What is the maximum value (to four decimal places) of the Distance variable in the scaled dataset?
+### 3.1559
+
+# 3. Which statement best describes the resulting clusters?
+## *a. Drivers with shorter distances are in one cluster and those with longer distances are in another 
+## *b. Drivers with a higher proportion of speeding are in one cluster and those with a lower proportion of speeding are in another 
+## *c. Neither of these statements apply to the resulting clusters 
+### a
+
+## 4. Which value of k appears to be most appropriate for this data?
+### 4
+
+## 5. What number of clusters appears to be ideal based on this plot?
+### 4
+
+## 6. Which statements (select all that apply) appear to be most apparent about the clusters created in this question?
+## *a. One cluster is composed of short distance drivers with a low proportion of speeding. 
+## *b. One cluster is composed of long distance drivers with a high proportion of speeding. 
+## *c. One cluster is composed of long distance drivers with a low proportion of speeding. 
+
+## *d. One cluster is composed of short distance drivers with a high proportion of speeding. 
+### All of the above
