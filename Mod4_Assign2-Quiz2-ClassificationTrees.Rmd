@@ -1,0 +1,200 @@
+---
+title: "Mod4_Assign2-Quiz2-ClassificationTrees"
+author: "Grace Williams"
+date: "2023-06-07"
+output: word_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## : For this assignment you will need the following libraries: tidyverse, tidymodels, caret, rpart, rpart.plot, rattle, and RColorBrewer.
+## Before beginning the assignment tasks, you should read-in the data for the assignment into a data frame called “heart”.
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(RColorBrewer)
+library(readr)
+library(GGally)
+library(mice)
+library(VIM)
+
+heart <- read_csv("heart_disease-1.csv")
+```
+
+## Then carefully convert the “sex”, “ChestPainType”, “RestingECG”, “ExerciseAngina”, “ST_Slope”, and “HeartDisease” variables to factors. Recode the levels of the “HeartDisease” variable from “0” to “No” and “1” to “Yes”
+```{r}
+heart = heart %>% mutate(Sex = as_factor(Sex)) %>%
+  mutate(ChestPainType = as_factor(ChestPainType)) %>%
+  mutate(RestingECG = as_factor(RestingECG)) %>%
+  mutate(ExerciseAngina = as_factor(ExerciseAngina)) %>%
+  mutate(ST_Slope = as_factor(ST_Slope)) %>%
+  mutate(HeartDisease = as_factor(HeartDisease)) %>%
+  mutate(HeartDisease = fct_recode(HeartDisease, "No" = "0", "Yes" = "1" ))
+```
+
+## Question 1: Split the data into training and testing sets. Your training set should have 70% of the data. Use a random number (set.seed) of 12345. Stratify your split by the response variable “HeartDisease”.
+## How many rows are in the training set?
+### 642
+```{r}
+set.seed(12345) 
+heart_split = initial_split(heart, prop = 0.7, strata = HeartDisease) #70% in training
+train = training(heart_split) 
+test = testing(heart_split)
+```
+
+## Question 2: Create a classification tree to predict “HeartDisease” in the training set (using all of the other variables as predictors). Plot the tree. You do not need to manually tune the complexity parameter (i.e., it’s OK to allow R to try different cp values on its own). Do not use k-folds at this point.
+## The first split in the tree is a split on which variable?
+## A. Sex
+## B. ST_Slope
+## C. ChestPainType
+## D. ExerciseAngina
+### B
+```{r}
+train_recipe = recipe(HeartDisease ~ Sex +
+                        ChestPainType +
+                        RestingECG +
+                        ExerciseAngina +
+                        ST_Slope, train) %>%
+  step_dummy(all_nominal(),-all_outcomes())
+
+tree_model = decision_tree() %>% 
+  set_engine("rpart", model = TRUE) %>% #don't forget the model = TRUE flag
+  set_mode("classification")
+
+train_wflow = 
+  workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(train_recipe)
+
+train_fit = fit(train_wflow, train)
+summary(train_fit$fit$fit$fit)
+
+
+tree = train_fit %>% 
+  pull_workflow_fit() %>% 
+  pluck("fit")
+
+fancyRpartPlot(tree) 
+```
+```{r}
+fancyRpartPlot(tree, tweak=1.5) #tweak makes the tree a little easier to read
+```
+
+## Question 3: Examine the complexity parameter (cp) values tried by R.
+## Which cp value is “optimal” (recall that the optimal cp corresponds to the minimized “xerror” value)? Report your answer to two decimal places.
+### 0.01
+```{r}
+train_fit$fit$fit$fit$cptable
+```
+
+## Question 4: Use a tuning grid (as we did in the Titanic problem) to allow R to try 25 different values for the complexity parameter (cp). R will select reasonable values. Use 5-fold k-fold cross-validation (don’t forget to set up your folds). Use a seed of 123 when setting up your folds.
+
+## Hint: You can reuse the vast majority of the code that I provided for you. Be careful to change names and you should be “good to go”. Note: This model took about two minutes to run on my computer. Your run time will vary by your computational power :) Plot the relationship between the complexity parameter (cp) and model performance (given by accuracy and by ROC AUC). I have provided code in the lectures that uses the “collect_metrics” functions to help you do this.
+
+## From this plot, what is the accuracy of the model (to two decimal places) if a cp value of 0.1 is selected? You will need to “eyeball” this answer. I have included a bit of a tolerance in the answer on Canvas. As long as you are “close” to the correct accuracy, you will see your answer marked as correct.
+### 0.79
+```{r}
+
+set.seed(123)
+folds = vfold_cv(train, v = 5)
+```
+
+```{r}
+train_recipe = recipe(HeartDisease ~., train) %>%
+  step_dummy(all_nominal(),-all_outcomes())
+
+tree_model = decision_tree(cost_complexity = tune()) %>% 
+  set_engine("rpart", model = TRUE) %>% #don't forget the model = TRUE flag
+  set_mode("classification")
+
+tree_grid = grid_regular(cost_complexity(),
+                          levels = 25)
+
+
+train_wflow = 
+  workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(train_recipe)
+
+tree_res = 
+  train_wflow %>% 
+  tune_grid(
+    resamples = folds,
+    grid = tree_grid
+    )
+
+tree_res
+```
+
+```{r}
+tree_res %>%
+  collect_metrics() %>%
+  ggplot(aes(cost_complexity, mean)) +
+  geom_line(size = 1.5, alpha = 0.6) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) 
+
+
+best_tree = tree_res %>%
+  select_best("accuracy")
+
+best_tree
+
+```
+
+## Question 5: Which cp value (to four decimal places) yields the “optimal” accuracy value?
+### 0.0075
+
+## Question 6: Plot the tree that corresponds to the cp value from Task 5. Don’t forget to finalize your workflow and generate your final fit before trying to plot.
+
+## How would you classify a patient that is “Male” with an “ST_Slope” this not “Flat”?
+### Yes
+
+```{r}
+
+final_wf =
+  train_wflow %>%
+  finalize_workflow(best_tree)
+
+final_fit = fit(final_wf, train)
+
+tree = final_fit %>%
+  pull_workflow_fit() %>%
+  pluck("fit")
+
+fancyRpartPlot(tree, tweak = 1.5)
+
+
+
+```
+
+## Question 7: What is the accuracy (on the training set) of the “tree” that you generated in Question 6?
+## Take your time and think about how to determine this value. Report your answer to four decimal places.
+### 0.8754
+```{r}
+treepred = predict(final_fit, train, type = "class")
+head(treepred)
+
+confusionMatrix(treepred$.pred_class, train$HeartDisease, positive = "Yes")
+
+```
+
+## Question 8 What is the sensitivity of your model from Question 6 (on the training set)? Report your answer to four decimal places.
+### 0.9239
+
+## Question 9 What is the naive accuracy of your model from Question 6 (on the training set)? Report your answer to four decimal places.
+### 0.    
+```{r}
+
+treepred_test = predict(final_fit, test, type = "class")
+head(treepred_test)
+
+confusionMatrix(treepred_test$.pred_class, test$HeartDisease, positive = "Yes")
+```
+
+## Question 10 What is the accuracy of your model from Question 6 on the testing set (to four decimal places)?
+### 0.8478
